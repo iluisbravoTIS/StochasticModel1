@@ -10,6 +10,7 @@ namespace ModelStochastic1.Models.Structs
         public int nCUT { get; set; }
         public T_param T { get; set; }
         public Scen_set SCEN { get; set; }
+        public double TIMEPRICE { get; set; }
         public double DUAL { get; set; }
     }
 }

@@ -10,5 +10,6 @@ namespace ModelStochastic1.Models.Structs
         public Prod_set PROD { get; set; }
         public Scen_set SCEN { get; set; }
         public double DUAL { get; set; }
+        public double BALANCE2PRICE { get; set; }
     }
 }

@@ -141,7 +141,7 @@ namespace ModelStochastic1
                 //Insertar funcion objetivo
                 gModel.SetObjective(expr1, GRB.MAXIMIZE);
 
-                //subj to Cut_Defn {k in 1..nCUT}:
+                //subj to Cut_Defn {k in 1..nCUT}:  KE ESTA PASANDO
                 // Min_Stage2_Profit <=
                 //    sum { t in 2..T, s in SCEN}
                 //    time_price[t, s, k] * avail[t] +
@@ -149,17 +149,82 @@ namespace ModelStochastic1
                 //    bal2_price[p, s, k] * (-Inv1[p]) +
                 //    sum { p in PROD, t in 2..T, s in SCEN}
                 //    sell_lim_price[p, t, s, k] * market[p, t];
-                for (int i = 1; i <= nCUT; i++)
+                expr1.Clear();
+                double sum1 = 0;
+                double sum2 = 0;
+                for (int k = 1; k <= nCUT; k++)
                 {
-                    Tlist2.ForEach(x =>
+                    Tlist2.ForEach(tl =>
                     {
                         inputData.ScenList.ForEach(sl =>
                         {
+                            double timePrice = masterModelParameters.timePriceList.Find(x => x.T.Equals(tl.T)
+                            && x.SCEN.Equals(sl.SCEN) 
+                            && x.nCUT.Equals(k)).TIMEPRICE;
+
+                            double avail = inputData.AvailList.Find(al => al.T.Equals(tl.T)).AVAIL;
+
+                            sum1 += timePrice * avail;
+                        });
+                    });
+
+                    inputData.ProdList.ForEach(pl =>{
+                        Tlist2.ForEach(tl => {
+                            inputData.ScenList.ForEach(sl =>
+                            {
+                                double sellLimPrice = masterModelParameters.sellLimPriceList.Find(slpl => slpl.PROD.Equals(pl.PROD)
+                                && slpl.T.Equals(tl.T)
+                                && slpl.SCEN.Equals(sl.SCEN)
+                                && slpl.nCUT.Equals(k)).SELLLIMPRICE;
+
+                                double market = inputData.MarketList.Find(ml => ml.PROD.Equals(pl.PROD)
+                                && ml.T.Equals(tl.T)).MARKET;
+
+                                sum2 += sellLimPrice * market;
+                            });
+                        });                        
+                    });
+
+                    inputData.ProdList.ForEach(pl =>
+                    {
+                        inputData.ScenList.ForEach(sl =>
+                        {
+                            double bal2Price = masterModelParameters.balance2PriceList.Find(bp => bp.PROD.Equals(pl.PROD)
+                                && bp.SCEN.Equals(sl.SCEN) && bp.nCUT.Equals(k)).BALANCE2PRICE;
+
 
                         });
                     });
                 }
 
+                //Subject to Time1
+                expr1.Clear();
+                inputData.ProdList.ForEach(pl =>
+                {
+                    double rate = 1 / inputData.RateList.Find(rl => rl.PROD.Equals(pl.PROD)).RATE;
+                    double avail = inputData.AvailList.Find(al => al.T.Equals(1)).AVAIL;
+                    double rateAvail = avail / rate;
+                    int ixP = inputData.ProdList.IndexOf(pl);
+
+                    gModel.AddConstr(Make1[ixP], GRB.GREATER_EQUAL, rateAvail, "TIME");
+
+                });
+
+
+                //Subject to Balance1
+                expr1.Clear();
+                inputData.ProdList.ForEach(pl => {
+                    expr1.Clear();
+
+                    int ixP = inputData.ProdList.IndexOf(pl);
+                    expr1.AddTerm(1, Sell1[ixP]);
+                    expr1.AddTerm(1, Inv1[ixP]);
+                    expr1.AddTerm(-1, Make1[ixP]);
+
+                    double inv0 = inputData.Inv0List.Find(il => il.PROD.Equals(pl.PROD)).INV0;
+
+                    gModel.AddConstr(inv0, GRB.EQUAL, expr1, "Balance 1");
+                });
             }
             catch (GRBException ex)
             {

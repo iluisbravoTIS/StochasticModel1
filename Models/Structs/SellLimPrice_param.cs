@@ -12,5 +12,6 @@ namespace ModelStochastic1.Models.Structs
         public Scen_set SCEN { get; set; }
         public Prod_set PROD { get; set; }
         public double URC { get; set; }
+        public double SELLLIMPRICE { get; set; }
     }
 }
