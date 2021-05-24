@@ -7,7 +7,7 @@ namespace ModelStochastic1.Models.Structs
 {
     class SubModelOutputs
     {
-        public double stage2_Profit { get; set; }
+        public double stage2Profit { get; set; }
         public GRBVar[] make { get; set; }
         public GRBVar[] sell { get; set; }
         public GRBVar[] inv { get; set; }

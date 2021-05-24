@@ -10,7 +10,7 @@ namespace ModelStochastic1
     class MasterModel
     {
         IndexesVar ixVar = new IndexesVar();
-        public void buildModel(
+        public MasterModelOutputs buildModel(
              InputData inputData,
              int nCUT,
              MasterModelParameters masterModelParameters,
@@ -150,10 +150,13 @@ namespace ModelStochastic1
                 //    sum { p in PROD, t in 2..T, s in SCEN}
                 //    sell_lim_price[p, t, s, k] * market[p, t];
                 expr1.Clear();
-                double sum1 = 0;
-                double sum2 = 0;
+                double sumPriceAvail = 0;
+                double sumPriceMarket = 0;
+                expr1.AddTerm(1, Min_Stage2_Profit);
                 for (int k = 1; k <= nCUT; k++)
                 {
+                    //    sum { t in 2..T, s in SCEN}
+                    //    time_price[t, s, k] * avail[t] +
                     Tlist2.ForEach(tl =>
                     {
                         inputData.ScenList.ForEach(sl =>
@@ -164,10 +167,12 @@ namespace ModelStochastic1
 
                             double avail = inputData.AvailList.Find(al => al.T.Equals(tl.T)).AVAIL;
 
-                            sum1 += timePrice * avail;
+                            sumPriceAvail += timePrice * avail;
                         });
                     });
 
+                    //    sum { p in PROD, t in 2..T, s in SCEN}
+                    //    sell_lim_price[p, t, s, k] * market[p, t];
                     inputData.ProdList.ForEach(pl =>{
                         Tlist2.ForEach(tl => {
                             inputData.ScenList.ForEach(sl =>
@@ -180,11 +185,13 @@ namespace ModelStochastic1
                                 double market = inputData.MarketList.Find(ml => ml.PROD.Equals(pl.PROD)
                                 && ml.T.Equals(tl.T)).MARKET;
 
-                                sum2 += sellLimPrice * market;
+                                sumPriceMarket += sellLimPrice * market;
                             });
                         });                        
                     });
 
+                    //  sum { p in PROD, s in SCEN}
+                    //  bal2_price[p, s, k] * (-Inv1[p]) +
                     inputData.ProdList.ForEach(pl =>
                     {
                         inputData.ScenList.ForEach(sl =>
@@ -192,12 +199,15 @@ namespace ModelStochastic1
                             double bal2Price = masterModelParameters.balance2PriceList.Find(bp => bp.PROD.Equals(pl.PROD)
                                 && bp.SCEN.Equals(sl.SCEN) && bp.nCUT.Equals(k)).BALANCE2PRICE;
 
-
+                            int ixP = inputData.ProdList.IndexOf(pl);
+                            expr1.AddTerm(bal2Price, Inv1[ixP]);
                         });
                     });
                 }
+                gModel.AddConstr(expr1, GRB.LESS_EQUAL, sumPriceAvail + sumPriceMarket, "Cut_Defn");
 
-                //Subject to Time1
+                //subject to Time1:
+                //sum { p in PROD} (1 / rate[p]) * Make1[p] <= avail[1];
                 expr1.Clear();
                 inputData.ProdList.ForEach(pl =>
                 {
@@ -206,12 +216,13 @@ namespace ModelStochastic1
                     double rateAvail = avail / rate;
                     int ixP = inputData.ProdList.IndexOf(pl);
 
-                    gModel.AddConstr(Make1[ixP], GRB.GREATER_EQUAL, rateAvail, "TIME");
+                    gModel.AddConstr(Make1[ixP], GRB.GREATER_EQUAL, rateAvail, "TIME1");
 
                 });
 
 
-                //Subject to Balance1
+                //subject to Balance1 { p in PROD}:
+                //Make1[p] + inv0[p] = Sell1[p] + Inv1[p];
                 expr1.Clear();
                 inputData.ProdList.ForEach(pl => {
                     expr1.Clear();
@@ -223,14 +234,60 @@ namespace ModelStochastic1
 
                     double inv0 = inputData.Inv0List.Find(il => il.PROD.Equals(pl.PROD)).INV0;
 
-                    gModel.AddConstr(inv0, GRB.EQUAL, expr1, "Balance 1");
+                    gModel.AddConstr(inv0, GRB.EQUAL, expr1, "Balance1");
                 });
+
+                //carpeta donde se expande el modelo master
+                gModel.Write(outputFolder + "Master_Model.lp");
+
+                // RESOLVER EL MODELO
+                try
+                {
+                    Console.WriteLine("Solving the master model with gurobi..");
+                    gModel.Optimize();
+
+                    if (gModel.Status == 2)
+                    {
+                        for (int m = 0; m < Make1.Length; m++)
+                        {
+                            Console.WriteLine("Make1 Var: " + Make1[m].VarName + " = " + Make1[m].X);
+                        }
+
+                        for (int m = 0; m < Inv1.Length; m++)
+                        {
+                            Console.WriteLine("Inv1 Var: " + Inv1[m].VarName + " = " + Inv1[m].X);
+                        }
+
+                        for (int m = 0; m < Sell1.Length; m++)
+                        {
+                            Console.WriteLine("Sell Var: " + Sell1[m].VarName + " = " + Sell1[m].X);
+                        }
+                    }
+
+                    gModel.Dispose();
+                    env.Dispose();
+
+                    return new MasterModelOutputs()
+                    {
+                        make1 = Make1,
+                        sell1 = Sell1,
+                        inv1 = Inv1,
+                        expectedProfit = gModel.ObjVal,
+                        gModel = gModel
+                    };
+
+                }
+                catch { Console.WriteLine("ERROR SOLVING THE MODEL"); }
+
+                gModel.Dispose();
+                env.Dispose();
             }
             catch (GRBException ex)
             {
                 Console.WriteLine("Error code: " + ex.ErrorCode + ". " + ex.Message);
             }
 
+            return new MasterModelOutputs();
         }
     }
 }

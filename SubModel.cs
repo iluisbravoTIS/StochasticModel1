@@ -197,9 +197,9 @@ namespace ModelStochastic1
                //sum {p in PROD} (1/rate[p]) * Make[p,t,s] <= avail[t];
                 expr1.Clear();
                 Tlist2.ForEach(tl => {
-                    inputData.ProdList.ForEach(pl =>
+                    inputData.ScenList.ForEach(sl =>
                     {
-                        inputData.ScenList.ForEach(sl =>
+                        inputData.ProdList.ForEach(pl =>
                         {
                             double rate = 1 / inputData.RateList.Find(rl => rl.PROD.Equals(pl.PROD)).RATE;
 
@@ -209,12 +209,11 @@ namespace ModelStochastic1
 
                             int ixMake = ixVar.getIx3(ixP, ixT, ixS, inputData.ProdList.Count, Tlist2.Count, inputData.ScenList.Count);
 
-                            expr1.AddTerm(rate, Make[ixMake]);
-
-                            double avail = inputData.AvailList.Find(al => al.T.Equals(tl.T)).AVAIL;
-
-                            gModel.AddConstr(expr1, GRB.LESS_EQUAL, avail, "TIME_" + tl.T + "_" + sl.SCEN);
+                            expr1.AddTerm(rate, Make[ixMake]);                                                      
                         });
+
+                        double avail = inputData.AvailList.Find(al => al.T.Equals(tl.T)).AVAIL;
+                        gModel.AddConstr(expr1, GRB.LESS_EQUAL, avail, "TIME_" + tl.T + "_" + sl.SCEN);
                     });
                 });
 
@@ -302,18 +301,19 @@ namespace ModelStochastic1
                         }
                     }
 
-                    gModel.Dispose();
-                    env.Dispose();
-
-                    return new SubModelOutputs()
+                    SubModelOutputs smo = new SubModelOutputs()
                     {
                         make = Make,
                         sell = Sell,
                         inv = Inv,
-                        stage2_Profit = gModel.ObjVal,
+                        stage2Profit = gModel.ObjVal,
                         gModel = gModel
                     };
 
+                    //gModel.Dispose();
+                    //env.Dispose();
+
+                    return smo;
                 }
                 catch { Console.WriteLine("ERROR SOLVING THE MODEL"); }
 

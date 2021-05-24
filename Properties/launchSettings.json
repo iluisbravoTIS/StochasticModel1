@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ModelStochastic1": {
+      "commandName": "Project",
+      "nativeDebugging": false
+    }
+  }
+}

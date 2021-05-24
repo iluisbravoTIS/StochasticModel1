@@ -41,8 +41,10 @@ namespace ModelStochastic1
             {
                 inv1= inv1List
             };
-
             SubModelOutputs subModelOutputs = new SubModelOutputs();
+
+            MasterModelParameters masterModelParameters = new MasterModelParameters();
+            MasterModelOutputs masterModelOutputs = new MasterModelOutputs();
 
             //FOR 50
             for (int x = 0; x <= 50; x++)
@@ -51,11 +53,11 @@ namespace ModelStochastic1
                 subModelOutputs = sb.Build_Model(inputData, outputFolder);
 
                 //if Stage2_Profit < Min_Stage2_Profit - 0.00001 
-                if (subModelOutputs.stage2_Profit < Min_Stage2_Profit - 0.00001)
+                if (subModelOutputs.stage2Profit < Min_Stage2_Profit - 0.00001)
                 {
                     //let GAP := min(GAP, Min_Stage2_Profit - Stage2_Profit);
-                    GAP = Math.Min(GAP, Min_Stage2_Profit - subModelOutputs.stage2_Profit);
-                    
+                    GAP = Math.Min(GAP, Min_Stage2_Profit - subModelOutputs.stage2Profit);
+
                     //option display_1col 0;
                     //display GAP, Make, Sell, Inv;
 
@@ -65,10 +67,12 @@ namespace ModelStochastic1
                     //let { t in 2..T, s in SCEN} time_price[t, s, nCUT] := Time[t, s].dual;
                     List<TimePrice_param> timePriceList = new List<TimePrice_param>();
                     List<T_param> tlist2 = inputData.TList.FindAll(tl => tl.T >= 2);
-                    tlist2.ForEach(tl => {
-                        inputData.ScenList.ForEach(sl => {
+                    tlist2.ForEach(tl =>
+                    {
+                        inputData.ScenList.ForEach(sl =>
+                        {
                             string cn = "TIME_" + tl.T + "_" + sl.SCEN;
-                            var dl = subModelOutputs.gModel.GetConstrByName(cn).Get(GRB.DoubleAttr.Pi);
+                            double dl = subModelOutputs.gModel.GetConstrByName(cn).Get(GRB.DoubleAttr.Pi);
 
                             TimePrice_param tpp = new TimePrice_param()
                             {
@@ -86,16 +90,17 @@ namespace ModelStochastic1
                     List<Balance2Price_param> balance2PriceList = new List<Balance2Price_param>();
                     inputData.ProdList.ForEach(pl =>
                     {
-                        inputData.ScenList.ForEach(sl => 
+                        inputData.ScenList.ForEach(sl =>
                         {
                             string cn = "BALANCE2_" + pl.PROD + "_" + sl.SCEN;
                             var dl = subModelOutputs.gModel.GetConstrByName(cn).Get(GRB.DoubleAttr.Pi);
 
-                            Balance2Price_param b2p = new Balance2Price_param() {
-                             nCUT = nCUT,
-                             PROD = pl,
-                             SCEN = sl,
-                             DUAL = dl
+                            Balance2Price_param b2p = new Balance2Price_param()
+                            {
+                                nCUT = nCUT,
+                                PROD = pl,
+                                SCEN = sl,
+                                DUAL = dl
                             };
 
                             balance2PriceList.Add(b2p);
@@ -107,20 +112,21 @@ namespace ModelStochastic1
                     IndexesVar ixVar = new IndexesVar();
                     inputData.ProdList.ForEach(pl =>
                     {
-                        tlist2.ForEach(tl => {                        
+                        tlist2.ForEach(tl =>
+                        {
                             inputData.ScenList.ForEach(sl =>
                             {
                                 int ixP = inputData.ProdList.IndexOf(pl);
                                 int ixT = tlist2.IndexOf(tl);
-                                int ixS = inputData.ScenList.IndexOf(sl);                                
+                                int ixS = inputData.ScenList.IndexOf(sl);
                                 int ix = ixVar.getIx3(ixP, ixT, ixS, inputData.ProdList.Count, tlist2.Count, inputData.ScenList.Count);
 
                                 SellLimPrice_param slp = new SellLimPrice_param()
                                 {
-                                    nCUT= nCUT,
-                                    PROD=pl,
-                                    SCEN=sl,
-                                    T= tl,
+                                    nCUT = nCUT,
+                                    PROD = pl,
+                                    SCEN = sl,
+                                    T = tl,
                                     URC = subModelOutputs.sell[ix].RC
                                 };
                                 sellLimPriceList.Add(slp);
@@ -128,6 +134,36 @@ namespace ModelStochastic1
                         });
                     });
                 }
+                else break;
+
+                //printf "\nRE-SOLVING MASTER PROBLEM\n\n";
+
+                //solve Master;
+                //printf "\n";
+                //option display_1col 20;
+                //display Make1, Inv1, Sell1;
+
+                MasterModel masterModel = new MasterModel();
+                masterModelOutputs = masterModel.buildModel(inputData, nCUT, masterModelParameters, outputFolder);
+
+                //let { p in PROD}
+                //inv1[p] := Inv1[p];
+                inputData.ProdList.ForEach(pl =>
+                {
+                    int ixP = inputData.ProdList.IndexOf(pl);
+                    //inv1List.Find(il => il.PROD.Equals(pl.PROD)).INV0 = masterModelOutputs.inv1[ixP].X;
+
+                    Inv0_param invProdNew = new Inv0_param()
+                    {
+                        PROD = pl.PROD,
+                        INV0 = masterModelOutputs.inv1[ixP].X
+                    };
+
+                    int ixPInv = inv1List.IndexOf(inv1List.Find(il => il.PROD.Equals(pl.PROD)));
+                    inv1List[ixPInv] = invProdNew;
+
+                });
+
             }
         }
     }
